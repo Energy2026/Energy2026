@@ -77,4 +77,6 @@ EnergyReading { id="..."
 4. Вихід
 Введіть номер команди (1-4): 4
 INFO --- [ionShutdownHook] org.mongodb.driver.connection : Closed connection to localhost:27017
+
+
 ```
