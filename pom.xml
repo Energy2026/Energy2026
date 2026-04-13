@@ -155,12 +155,6 @@
                         <include>**/*FlowIntegrationTests.java</include>
                     </includes>
                     <argLine>@{argLine}</argLine>
-                    <environmentVariables>
-                        <DOCKER_HOST>tcp://localhost:2375</DOCKER_HOST>
-                    </environmentVariables>
-                    <systemPropertyVariables>
-                        <api.version>1.54</api.version>
-                    </systemPropertyVariables>
                 </configuration>
                 <executions>
                     <execution>
@@ -296,4 +290,39 @@
             </plugin>
         </plugins>
     </build>
+
+    <!--
+        Активується локально (коли змінна середовища CI не встановлена).
+        На GitHub Actions CI=true завжди присутня, тому цей профіль там не діє.
+        Налаштовує Failsafe для роботи з Docker Desktop на Windows:
+        - DOCKER_HOST: TCP замість named pipe (потребує увімкнення у Docker Desktop → General)
+        - api.version: Docker Desktop 4.x відхиляє запити з версією API нижче ~1.40
+    -->
+    <profiles>
+        <profile>
+            <id>local-docker-desktop</id>
+            <activation>
+                <property>
+                    <name>!env.CI</name>
+                </property>
+            </activation>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-failsafe-plugin</artifactId>
+                        <version>3.5.1</version>
+                        <configuration>
+                            <environmentVariables>
+                                <DOCKER_HOST>tcp://localhost:2375</DOCKER_HOST>
+                            </environmentVariables>
+                            <systemPropertyVariables>
+                                <api.version>1.54</api.version>
+                            </systemPropertyVariables>
+                        </configuration>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+    </profiles>
 </project>
