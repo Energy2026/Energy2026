@@ -123,6 +123,7 @@ jobs:
   publish:
     name: Publish Package
     needs: build
+    if: github.event_name == 'push'
     permissions:
       contents: read
       packages: write
