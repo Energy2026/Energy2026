@@ -1,16 +1,16 @@
 # Приклад Java-програми ведення показників електролічильників з використанням СКБД MongoDB
 
 ## Кроки для виконання
+
 1. Завантажте і встановіть Java Development Kit 17 (або новішу версію) для Windows.
 1. Завантажте Maven з https://dlcdn.apache.org/maven/maven-3/3.8.9/binaries/apache-maven-3.8.9-bin.zip і розпакуйте його на локальний комп'ютер.
 1. В Windows в параметрах системи додайте системну змінну `MAVEN_HOME=<шлях до папки з Maven>`
 1. В Windows в параметрах системи додайте `;<шлях до папки з Maven>\bin` в системну змінну PATH.
 1. Встановіть СКБД MongoDB Community Server, вибравши варіант установки Complete → "Run service as Network Service user".
 1. Встановіть MongoDB Compass (GUI).
-1. Створіть базу даних `energy-db` і колекцію в ній `energy-readings`.
-1. Зберіть програму використовуючи команду: `mvn clean install`.
-1. Запустіть програму за допомогою команди: `mvn exec:java`.
-1. Якщо термінал відображає знаки питання "?" замість українських символів, зконфігуруйте термінал на відображення шрифту в форматі UTF-8 виконавши команду `chcp 65001`.
+1. Зберіть програму використовуючи команду: `mvn package`.
+1. Запустіть програму за допомогою команди: `mvn spring-boot:run`.
+1. Відкрийте браузер і перейдіть за адресою: `http://localhost:8081`.
 
 ## Налаштування MONGO_URI
 
@@ -37,24 +37,67 @@ mongodb+srv://<db-username>:<db-password>@<cluster-url>/energy-db?retryWrites=tr
 Windows Command Prompt:
 ```
 set MONGO_URI=mongodb+srv://db-username:db-password@cluster0.abcde.mongodb.net/energy-db?retryWrites=true^&w=majority
-mvn exec:java
+mvn spring-boot:run
 ```
 
 PowerShell:
 ```
 $env:MONGO_URI="mongodb+srv://db-username:db-password@cluster0.abcde.mongodb.net/energy-db?retryWrites=true&w=majority"
-mvn exec:java
+mvn spring-boot:run
 ```
 
 Linux/macOS:
 ```
 export MONGO_URI="mongodb+srv://db-username:db-password@cluster0.abcde.mongodb.net/energy-db?retryWrites=true&w=majority"
-mvn exec:java
+mvn spring-boot:run
 ```
 
 > Примітка: якщо пароль містить спеціальні символи, їх потрібно URL-кодувати в connection string. Наприклад, символ `@` потрібно замінити на `%40`.
 
-## Результати виконання програми
+## Запуск тестів
+
+### Unit-тести
+
+Запускає unit-тести з перевіркою покриття коду (мінімум 75% рядків):
+
+```
+mvn package
+```
+
+### Інтеграційні тести
+
+Запускає інтеграційні тести з реальною MongoDB у тимчасовому Docker-контейнері (Testcontainers).
+Потребує встановленого та запущеного Docker.
+
+```
+mvn verify -DskipUTs=true
+```
+
+> На Windows з Docker Desktop необхідно увімкнути параметр "Expose daemon on tcp://localhost:2375 without TLS" у налаштуваннях Docker Desktop → General.
+
+## Правила покриття коду
+
+| Тип тестів | Область | Мінімальне покриття |
+|---|---|---|
+| Unit (Surefire) | Весь проєкт (BUNDLE) | 75% рядків |
+| Integration (Failsafe) | `EnergyReading` | 100% рядків |
+| Integration (Failsafe) | `EnergyReadingController` | 100% рядків |
+
+## CI/CD Pipeline
+
+```
+Static Analysis → Build (unit tests) → Integration Tests → Publish Package
+```
+
+| Крок | Що робить |
+|---|---|
+| Static Analysis | Перевірка стилю коду (Checkstyle) |
+| Build | Збірка проєкту, unit-тести, JaCoCo coverage ≥ 75% |
+| Integration Tests | Запуск Testcontainers + MockMvc, JaCoCo coverage = 100% для EnergyReading і EnergyReadingController |
+| Publish Package | Публікація артефакту в GitHub Packages (тести не повторюються) |
+
+## Результати запуску застосунку
+
 ```
   .   ____          _            __ _ _
  /\\ / ___'_ __ _ _(_)_ __  __ _ \ \ \ \
@@ -64,45 +107,34 @@ mvn exec:java
  =========|_|==============|___/=/_/_/_/
  :: Spring Boot ::                (v2.5.4)
 
-INFO --- [lication.main()] org.energy.EnergyApplication : Starting EnergyApplication
-INFO --- [lication.main()] org.mongodb.driver.cluster   : Adding discovered server cluster0.mongodb.net:27017
-INFO --- [lication.main()] org.mongodb.driver.cluster   : Discovered replica set primary cluster0.mongodb.net:27017
-INFO --- [lication.main()] org.energy.EnergyApplication : Started EnergyApplication in 2.1 seconds
-1. Додати показники з CSV-файлу
-2. Подивитись показники
-3. Видалити показники
-4. Вихід
-Введіть номер команди (1-4): 1
-12 документів з показниками електролічильників завантажено з CSV.
-1. Додати показники з CSV-файлу
-2. Подивитись показники
-3. Видалити показники
-4. Вихід
-Введіть номер команди (1-4): 2
-Знайдено 12 документів показників:
-EnergyReading { id="..."
- consumer="Коваленко Іван Петрович"
- supplier="ЕнергоПостач"
- technician="Сидоренко Олег Миколайович"
- reading_date="2024-09-01"
- reading_value="1250.5"
- address="м. Київ, вул. Шевченка, 12, кв. 5"
- tariff_zone="Денна"
- price_per_kwh="2.85"
- experience_years="5"
- meter_type="Електронний"
-}
-... (всього 12 документів)
-1. Додати показники з CSV-файлу
-2. Подивитись показники
-3. Видалити показники
-4. Вихід
-Введіть номер команди (1-4): 3
-Показники видалено.
-1. Додати показники з CSV-файлу
-2. Подивитись показники
-3. Видалити показники
-4. Вихід
-Введіть номер команди (1-4): 4
-INFO --- [ionShutdownHook] org.mongodb.driver.connection : Closed connection to cluster0.mongodb.net:27017
+INFO --- [main] org.energy.EnergyApplication : Starting EnergyApplication
+INFO --- [main] org.mongodb.driver.cluster   : Adding discovered server localhost:27017
+INFO --- [main] org.energy.EnergyApplication : Started EnergyApplication in 2.3 seconds (JVM running for 3.1)
+```
+
+Після запуску відкрийте браузер за адресою: `http://localhost:8081`
+
+## Результати збірки
+
+```
+[INFO] --- surefire:3.5.1:test (default-test) @ energy2026 ---
+[INFO] Tests run: 14, Failures: 0, Errors: 0, Skipped: 0
+[INFO]
+[INFO] --- jacoco:0.8.14:check (check) @ energy2026 ---
+[INFO] All coverage checks have been met.
+[INFO]
+[INFO] BUILD SUCCESS
+```
+
+## Результати інтеграційних тестів
+
+```
+[INFO] --- failsafe:3.5.1:integration-test (default) @ energy2026 ---
+[INFO] Running org.energy.EnergyReadingFlowIntegrationTests
+[INFO] Tests run: 7, Failures: 0, Errors: 0, Skipped: 0
+[INFO]
+[INFO] --- jacoco:0.8.14:check (check-integration) @ energy2026 ---
+[INFO] All coverage checks have been met.
+[INFO]
+[INFO] BUILD SUCCESS
 ```

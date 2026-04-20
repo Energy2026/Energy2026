@@ -35,7 +35,9 @@ jobs:
           server-password: GITHUB_TOKEN
 
       # Крок 3: Публікація артефактів в GitHub Packages
+      # -DskipTests вимикає unit-тести (Surefire) та integration-тести (Failsafe)
+      # -Djacoco.skip=true вимикає JaCoCo перевірки покриття (тести вже пройшли в CI)
       - name: Publish to GitHub Packages
-        run: mvn --batch-mode deploy --file pom.xml -DskipTests
+        run: mvn --batch-mode deploy --file pom.xml -DskipTests -Djacoco.skip=true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
