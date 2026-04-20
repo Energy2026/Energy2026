@@ -5,7 +5,7 @@
     <groupId>org.energy</groupId>
     <artifactId>energy2026</artifactId>
     <packaging>jar</packaging>
-    <version>0.2.0</version>
+    <version>0.3.0-SNAPSHOT</version>
 
     <parent>
         <groupId>org.springframework.boot</groupId>
@@ -28,7 +28,7 @@
         <connection>scm:git:https://github.com/Energy2026/Energy2026.git</connection>
         <developerConnection>scm:git:https://github.com/Energy2026/Energy2026.git</developerConnection>
         <url>https://github.com/Energy2026/Energy2026</url>
-        <tag>0.2.0</tag>
+        <tag>HEAD</tag>
     </scm>
 
     <dependencyManagement>
