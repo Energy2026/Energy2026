@@ -1,0 +1,12 @@
+services:
+  app:
+    build:
+      context: .
+      dockerfile: deploy/Dockerfile
+    ports:
+      - "8081:8081"
+    environment:
+      # Connects to your local MongoDB where existing data is stored.
+      # On Windows/Mac Docker Desktop, host.docker.internal resolves to the host machine.
+      MONGO_URI: mongodb://host.docker.internal:27017/energy-db
+      PORT: "8081"
