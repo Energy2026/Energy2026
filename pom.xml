@@ -164,7 +164,6 @@
                     <skipITs>${skipIntegrationTests}</skipITs>
                     <includes>
                         <include>**/*FlowIntegrationTests.java</include>
-                        <include>**/*E2ETests.java</include>
                     </includes>
                     <argLine>@{argLine}</argLine>
                 </configuration>
