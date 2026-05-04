@@ -120,6 +120,46 @@ class EnergyReadingFlowIntegrationTests {
     }
 
     @Test
+    void showEditForm_returnsEditViewWithExistingReading() throws Exception {
+        EnergyReading saved = repository.save(new EnergyReading(
+            "Споживач", "Постачальник", "Технік",
+            "2024-01-01", "500.0", "м. Київ, вул. Хрещатик, 1",
+            "Нічна", "1.32", "3", "Індукційний"
+        ));
+
+        mockMvc.perform(get("/edit/" + saved.getId()))
+            .andExpect(status().isOk())
+            .andExpect(view().name("edit"))
+            .andExpect(model().attributeExists("reading"));
+    }
+
+    @Test
+    void updateReading_updatesInDatabaseAndRedirects() throws Exception {
+        EnergyReading saved = repository.save(new EnergyReading(
+            "Споживач", "Постачальник", "Технік",
+            "2024-01-01", "500.0", "м. Київ, вул. Хрещатик, 1",
+            "Нічна", "1.32", "3", "Індукційний"
+        ));
+
+        mockMvc.perform(post("/edit/" + saved.getId())
+            .param("consumer", "Оновлений Споживач")
+            .param("supplier", "Постачальник")
+            .param("technician", "Технік")
+            .param("reading_date", "2024-06-01")
+            .param("reading_value", "750.0")
+            .param("address", "м. Київ, вул. Хрещатик, 1")
+            .param("tariff_zone", "Нічна")
+            .param("price_per_kwh", "1.32")
+            .param("experience_years", "3")
+            .param("meter_type", "Індукційний"))
+            .andExpect(status().is3xxRedirection())
+            .andExpect(redirectedUrl("/"));
+
+        EnergyReading updated = repository.findById(saved.getId()).orElseThrow();
+        assertEquals("Оновлений Споживач", updated.getConsumer());
+    }
+
+    @Test
     void energyReading_noArgConstructorAndSetters() {
         EnergyReading reading = new EnergyReading();
 

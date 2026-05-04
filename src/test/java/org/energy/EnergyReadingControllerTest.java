@@ -10,6 +10,7 @@ import static org.mockito.Mockito.when;
 
 import java.util.Collections;
 import java.util.List;
+import java.util.Optional;
 import org.junit.jupiter.api.Test;
 import org.springframework.ui.ExtendedModelMap;
 import org.springframework.ui.Model;
@@ -100,6 +101,53 @@ class EnergyReadingControllerTest {
         String viewName = controller.deleteReading("id-123");
 
         verify(repository, times(1)).deleteById("id-123");
+        assertEquals("redirect:/", viewName);
+    }
+
+    @Test
+    void showEditFormReturnsEditViewName() {
+        EnergyReadingRepository repository =
+                mock(EnergyReadingRepository.class);
+        EnergyReading reading = anEnergyReading().build();
+        when(repository.findById("id-123"))
+                .thenReturn(Optional.of(reading));
+        EnergyReadingController controller =
+                new EnergyReadingController(repository);
+        Model model = new ExtendedModelMap();
+
+        String viewName = controller.showEditForm("id-123", model);
+
+        assertEquals("edit", viewName);
+    }
+
+    @Test
+    void showEditFormAddsExistingReadingToModel() {
+        EnergyReadingRepository repository =
+                mock(EnergyReadingRepository.class);
+        EnergyReading reading = anEnergyReading().build();
+        when(repository.findById("id-123"))
+                .thenReturn(Optional.of(reading));
+        EnergyReadingController controller =
+                new EnergyReadingController(repository);
+        Model model = new ExtendedModelMap();
+
+        controller.showEditForm("id-123", model);
+
+        assertNotNull(model.getAttribute("reading"));
+        assertEquals(reading, model.getAttribute("reading"));
+    }
+
+    @Test
+    void updateReadingSavesToRepositoryAndRedirects() {
+        EnergyReadingRepository repository =
+                mock(EnergyReadingRepository.class);
+        EnergyReadingController controller =
+                new EnergyReadingController(repository);
+        EnergyReading reading = anEnergyReading().build();
+
+        String viewName = controller.updateReading("id-123", reading);
+
+        verify(repository, times(1)).save(reading);
         assertEquals("redirect:/", viewName);
     }
 }

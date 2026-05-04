@@ -52,6 +52,28 @@ public class EnergyReadingController {
     }
 
     /**
+     * Сторінка форми для редагування існуючого запису.
+     */
+    @GetMapping("/edit/{id}")
+    public String showEditForm(@PathVariable String id, Model model) {
+        EnergyReading reading = energyReadingRepository.findById(id).orElseThrow();
+        model.addAttribute("reading", reading);
+        return "edit";
+    }
+
+    /**
+     * Зберігає оновлений запис до бази даних і перенаправляє на головну.
+     */
+    @PostMapping("/edit/{id}")
+    public String updateReading(
+            @PathVariable String id,
+            @ModelAttribute EnergyReading reading) {
+        reading.setId(id);
+        energyReadingRepository.save(reading);
+        return "redirect:/";
+    }
+
+    /**
      * Видаляє запис за ідентифікатором і перенаправляє на головну.
      */
     @PostMapping("/delete/{id}")

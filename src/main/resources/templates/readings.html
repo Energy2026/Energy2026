@@ -38,13 +38,17 @@
         <td th:text="${reading.experience_years}"></td>
         <td th:text="${reading.meter_type}"></td>
         <td>
-            <form th:action="@{/delete/{id}(id=${reading.id})}"
-                  method="post">
-                <button type="submit"
-                        class="btn btn-danger btn-sm">
-                    Видалити
-                </button>
-            </form>
+            <div class="d-flex gap-1">
+                <a th:href="@{/edit/{id}(id=${reading.id})}"
+                   class="btn btn-warning btn-sm">Редагувати</a>
+                <form th:action="@{/delete/{id}(id=${reading.id})}"
+                      method="post">
+                    <button type="submit"
+                            class="btn btn-danger btn-sm">
+                        Видалити
+                    </button>
+                </form>
+            </div>
         </td>
     </tr>
     </tbody>

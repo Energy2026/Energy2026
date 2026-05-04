@@ -79,6 +79,14 @@
             <artifactId>mongodb</artifactId>
             <scope>test</scope>
         </dependency>
+
+        <!-- Playwright for E2E UI tests -->
+        <dependency>
+            <groupId>com.microsoft.playwright</groupId>
+            <artifactId>playwright</artifactId>
+            <version>1.55.0</version>
+            <scope>test</scope>
+        </dependency>
     </dependencies>
 
     <distributionManagement>
@@ -138,6 +146,7 @@
                     <useModulePath>false</useModulePath>
                     <excludes>
                         <exclude>**/*FlowIntegrationTests.java</exclude>
+                        <exclude>**/*E2ETests.java</exclude>
                     </excludes>
                     <skipTests>${skipUTs}</skipTests>
                 </configuration>
@@ -151,6 +160,7 @@
                 <configuration>
                     <includes>
                         <include>**/*FlowIntegrationTests.java</include>
+                        <include>**/*E2ETests.java</include>
                     </includes>
                     <argLine>@{argLine}</argLine>
                 </configuration>

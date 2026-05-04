@@ -131,7 +131,7 @@ jobs:
         run: |
           mkdir -p target/ci-logs
           set -o pipefail
-          mvn -B verify -DskipUTs=true -Dcheckstyle.skip=true | tee target/ci-logs/integration-tests.log
+          mvn -B verify -DskipUTs=true -Dcheckstyle.skip=true -Dit.test=EnergyReadingFlowIntegrationTests | tee target/ci-logs/integration-tests.log
 
       - name: Upload integration test reports
         if: always()
@@ -195,10 +195,60 @@ jobs:
           path: target/ci-logs/**
           if-no-files-found: warn
 
+  e2e-tests:
+    name: E2E UI Tests
+    runs-on: ubuntu-latest
+    needs: integration-tests
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+          cache: maven
+
+      - name: Compile test sources
+        shell: bash
+        run: mvn -B test-compile -Dcheckstyle.skip=true
+
+      - name: Install Playwright Chromium
+        shell: bash
+        run: >
+          mvn exec:java -e
+          -Dexec.mainClass=com.microsoft.playwright.CLI
+          -Dexec.args="install --with-deps chromium"
+          -Dexec.classpathScope=test
+
+      - name: Run E2E tests
+        shell: bash
+        run: |
+          mkdir -p target/ci-logs
+          set -o pipefail
+          mvn -B verify -DskipUTs=true -Dcheckstyle.skip=true -Dit.test=EnergyReadingHappyPathE2ETests | tee target/ci-logs/e2e-tests.log
+
+      - name: Upload E2E test reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-test-reports
+          path: target/failsafe-reports/**
+          if-no-files-found: warn
+
+      - name: Upload E2E test logs on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-test-logs
+          path: target/ci-logs/**
+          if-no-files-found: warn
+
   build:
     name: Build
     runs-on: ubuntu-latest
-    needs: integration-tests
+    needs: e2e-tests
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
