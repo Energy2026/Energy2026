@@ -131,7 +131,7 @@ jobs:
         run: |
           mkdir -p target/ci-logs
           set -o pipefail
-          mvn -B verify -DskipUTs=true -Dcheckstyle.skip=true | tee target/ci-logs/integration-tests.log
+          mvn -B verify -DskipUnitTests=true -Dcheckstyle.skip=true | tee target/ci-logs/integration-tests.log
 
       - name: Upload integration test reports
         if: always()
@@ -251,3 +251,24 @@ jobs:
       packages: write
     uses: ./.github/workflows/docker-publish.yml
     secrets: inherit
+
+  # Етап 7: розгорнути застосунок на Render.com у межах pull request для E2E-тестування.
+  deploy-render-pr:
+    name: Deploy to Render (PR)
+    needs: publish-docker
+    if: github.event_name == 'pull_request'
+    permissions:
+      contents: read
+    uses: ./.github/workflows/render-deploy.yml
+    secrets: inherit
+
+  # Етап 8: запустити E2E UI-тести проти програми, яка була успішно розгорнута на Render.com
+  e2e-ui-tests:
+    name: E2E UI Tests
+    needs: deploy-render-pr
+    if: github.event_name == 'pull_request'
+    permissions:
+      contents: read
+    uses: ./.github/workflows/run-e2e-test.yml
+    with:
+      application_url: ${{ needs.deploy-render-pr.outputs.application_url }}
