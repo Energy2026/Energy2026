@@ -33,6 +33,7 @@ jobs:
     if: >
       github.event_name == 'workflow_dispatch' ||
       github.event_name == 'workflow_call' ||
+      github.event_name == 'pull_request' ||
       (github.event.workflow_run.conclusion == 'success' &&
        github.event.workflow_run.head_branch == 'main')
     # Надає доступ до читання вмісту репозиторію.
@@ -59,18 +60,19 @@ jobs:
             version="$(grep -oPm1 '(?<=<version>)[^<]+' pom.xml | tr '[:upper:]' '[:lower:]')"
             echo "image_url=${image_repo}:${version}" >> "$GITHUB_OUTPUT"
 
-          elif [[ "${{ github.event_name }}" == "workflow_call" ]]; then
+          elif [[ "${{ github.event_name }}" == "pull_request" ]]; then
             # Для виклику з CI в pull request формуємо тег у форматі pr-<номер PR>.
             pr_number="${{ github.event.pull_request.number }}"
             if [[ -z "$pr_number" ]]; then
-              echo "image_url=${image_repo}:latest" >> "$GITHUB_OUTPUT"
-            else
-              echo "image_url=${image_repo}:pr-${pr_number}" >> "$GITHUB_OUTPUT"
+              # Якщо номер PR недоступний у контексті, деплой продовжувати не можна.
+              printf 'Unable to resolve pull request number for pull_request context.\n' >&2
+              exit 1
             fi
+            echo "image_url=${image_repo}:pr-${pr_number}" >> "$GITHUB_OUTPUT"
 
           else
-            # Для ручного запуску використовуємо тег, переданий через input image_tag.
-            echo "image_url=${image_repo}:${{ inputs.image_tag }}" >> "$GITHUB_OUTPUT"
+            # Для ручного запуску або workflow_call використовуємо тег image_tag (або latest).
+            echo "image_url=${image_repo}:${{ inputs.image_tag || 'latest' }}" >> "$GITHUB_OUTPUT"
           fi
 
       # Крок 3: перевірка наявності обов'язкових секретів GitHub Actions для Render.
