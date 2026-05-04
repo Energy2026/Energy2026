@@ -1,380 +1,101 @@
 package org.energy;
 
-import static org.assertj.core.api.Assertions.assertThat;
+import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.microsoft.playwright.Browser;
-import com.microsoft.playwright.BrowserContext;
 import com.microsoft.playwright.BrowserType;
 import com.microsoft.playwright.Locator;
 import com.microsoft.playwright.Page;
 import com.microsoft.playwright.Playwright;
-import com.microsoft.playwright.options.ScreenshotType;
-import com.microsoft.playwright.options.WaitForSelectorState;
-import java.net.URI;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.Paths;
-import java.time.Instant;
-import java.util.List;
-import java.util.function.BooleanSupplier;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.test.context.DynamicPropertyRegistry;
+import org.springframework.test.context.DynamicPropertySource;
+import org.testcontainers.containers.MongoDBContainer;
+import org.testcontainers.junit.jupiter.Container;
+import org.testcontainers.junit.jupiter.Testcontainers;
 
+/**
+ * E2E тести — перевіряють повний user flow через реальний браузер (Playwright/Chromium).
+ */
+@Testcontainers
+@SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.DEFINED_PORT)
 class EnergyReadingHappyPathE2ETests {
 
-    // Підтримуємо конфігурацію через JVM properties та environment variables,
-    // щоб один і той самий тест можна було запускати локально й у CI.
-    private static final String BASE_URL_PROPERTY = "e2e.base-url";
-    private static final String BASE_URL_ENV = "E2E_BASE_URL";
-    private static final String SELENIUM_CDP_URL_PROPERTY = "e2e.selenium-cdp-url";
-    private static final String SELENIUM_CDP_URL_ENV = "E2E_SELENIUM_CDP_URL";
-    private static final String ARTIFACTS_DIR_PROPERTY = "e2e.artifacts-dir";
-    private static final String ARTIFACTS_DIR_ENV = "E2E_ARTIFACTS_DIR";
-    private static final String PAGE_READY_TIMEOUT_MILLIS_PROPERTY = "e2e.page-ready-timeout-millis";
-    private static final String PAGE_READY_TIMEOUT_MILLIS_ENV = "E2E_PAGE_READY_TIMEOUT_MILLIS";
-    private static final String ENERGY_PAGE_TITLE = "Показники електролічильників";
-    private static final String RENDER_HOST_SUFFIX = ".onrender.com";
-    private static final int WAIT_TIMEOUT_MILLIS = 15000;
-    private static final int POLL_INTERVAL_MILLIS = 250;
-    private static final int DEFAULT_PAGE_READY_TIMEOUT_MILLIS = 180000;
-    private static final int DEFAULT_TIMEOUT_MILLIS = 30000;
-    private static final int RENDER_TIMEOUT_MILLIS = 180000;
-    private static final int VIEWPORT_WIDTH = 1440;
-    private static final int VIEWPORT_HEIGHT = 1200;
-    private static final int VIDEO_WIDTH = 1280;
-    private static final int VIDEO_HEIGHT = 720;
+    private static final String BASE_URL = "http://localhost:8081";
 
-    private String baseUrl;
-    private String seleniumCdpUrl;
-    private int pageReadyTimeoutMillis;
-    private Path artifactsDir;
-    private Path videosDir;
-    private Path screenshotsDir;
+    @Container
+    static MongoDBContainer mongoDBContainer = new MongoDBContainer("mongo:6.0");
+
+    @DynamicPropertySource
+    static void mongoProperties(DynamicPropertyRegistry registry) {
+        registry.add("spring.data.mongodb.uri", mongoDBContainer::getReplicaSetUrl);
+    }
+
+    @Autowired
+    private EnergyReadingRepository repository;
+
     private Playwright playwright;
     private Browser browser;
-    private BrowserContext browserContext;
     private Page page;
-    private String createdConsumer;
 
-    // Ініціалізуємо Playwright, директорії артефактів і браузерне оточення перед кожним тестом.
     @BeforeEach
     void setUp() {
-        baseUrl = resolveBaseUrl();
-
-        // Для E2E URL є обов'язковим, тому відсутність конфігурації вважаємо помилкою тестового запуску.
-        if (baseUrl == null || baseUrl.isBlank()) {
-            throw new IllegalStateException("Set e2e.base-url or E2E_BASE_URL to run E2E UI tests.");
-        }
-        seleniumCdpUrl = resolveOptionalValue(SELENIUM_CDP_URL_PROPERTY, SELENIUM_CDP_URL_ENV);
-        pageReadyTimeoutMillis = resolvePageReadyTimeoutMillis();
-        artifactsDir = resolveArtifactsDir();
-        videosDir = artifactsDir.resolve("videos");
-        screenshotsDir = artifactsDir.resolve("screenshots");
-        createDirectory(videosDir);
-        createDirectory(screenshotsDir);
-
+        repository.deleteAll();
         playwright = Playwright.create();
-        browser = createBrowser();
-
-        // Записуємо відео кожного прогону, щоб у CI можна було відтворити UI-поведінку.
-        browserContext = browser.newContext(new Browser.NewContextOptions()
-            .setRecordVideoDir(videosDir)
-            .setRecordVideoSize(VIDEO_WIDTH, VIDEO_HEIGHT)
-            .setViewportSize(VIEWPORT_WIDTH, VIEWPORT_HEIGHT));
-        page = browserContext.newPage();
-        page.setDefaultTimeout(resolvePlaywrightTimeoutMillis());
-        page.setDefaultNavigationTimeout(resolvePlaywrightTimeoutMillis());
+        browser = playwright.chromium().launch(
+                new BrowserType.LaunchOptions().setHeadless(true));
+        page = browser.newPage();
     }
 
-    // Закриваємо браузерні ресурси та прибираємо створений тестом запис, якщо він залишився.
     @AfterEach
     void tearDown() {
-        if (page != null && createdConsumer != null) {
-            try {
-                // Якщо тест впав після створення запису, намагаємось прибрати тестові дані.
-                deleteEnergyRow(createdConsumer);
-            } catch (Exception exception) {
-                // Preserve the original test failure; cleanup is best effort.
-            } finally {
-                createdConsumer = null;
-            }
-        }
-
-        if (browserContext != null) {
-            browserContext.close();
-        }
-
-        if (browser != null) {
-            browser.close();
-        }
-
-        if (playwright != null) {
-            playwright.close();
-        }
+        browser.close();
+        playwright.close();
     }
 
-    // Happy-path сценарій: створюємо запис через UI, перевіряємо його появу і видаляємо назад через UI.
+    private void addEntry(String consumer) {
+        page.navigate(BASE_URL + "/add");
+        page.fill("[name='consumer']", consumer);
+        page.fill("[name='supplier']", "Постачальник");
+        page.fill("[name='technician']", "Технік");
+        page.locator("input[name='reading_date']").fill("2024-01-01");
+        page.fill("[name='reading_value']", "500");
+        page.fill("[name='address']", "м. Київ, вул. Тестова, 1");
+        page.fill("[name='tariff_zone']", "Денна");
+        page.fill("[name='price_per_kwh']", "2.85");
+        page.fill("[name='experience_years']", "5");
+        page.fill("[name='meter_type']", "Електронний");
+        page.click("button[type='submit']");
+    }
+
     @Test
     void energyReadingHappyPathCreatesAndDeletesEntry() {
-        runWithDiagnostics("energy-reading-happy-path-creates-and-deletes-entry", () -> {
-            // Генеруємо унікальні значення, щоб тест не конфліктував з уже наявними даними.
-            String uniqueSuffix = String.valueOf(Instant.now().toEpochMilli());
-            String uniqueConsumer = "E2E Consumer " + uniqueSuffix;
-            createdConsumer = uniqueConsumer;
+        addEntry("Коваленко Тест");
 
-            // Переходимо на сторінку додавання і чекаємо, поки форма стане видимою.
-            page.navigate(baseUrl + "/add");
-            waitForAddPageForm();
-            assertThat(page.locator("form").count()).isEqualTo(1);
-
-            // Заповнюємо форму тестовими даними.
-            setInputValue("consumer", uniqueConsumer);
-            setInputValue("supplier", "E2E Supplier");
-            setInputValue("technician", "E2E Technician");
-            setInputValue("reading_date", "2026-05-04");
-            setInputValue("reading_value", "12345.6");
-            setInputValue("address", "Test Street 1");
-            setInputValue("tariff_zone", "T1");
-            setInputValue("price_per_kwh", "4.32");
-            setInputValue("experience_years", "5");
-            setInputValue("meter_type", "Digital");
-
-            // Відправляємо форму і чекаємо повернення на головну сторінку зі списком показників.
-            page.locator("button[type='submit']").click();
-            page.waitForURL(baseUrl + "/");
-            waitForEnergyPageHeader();
-
-            // Перевіряємо, що щойно створений рядок дійсно з'явився в таблиці.
-            Locator createdRow = waitForRowContaining(uniqueConsumer,
-                "Created energy reading row did not appear on the main page.");
-            assertThat(createdRow.textContent())
-                .contains(uniqueConsumer)
-                .contains("E2E Supplier");
-
-            // Видаляємо створений запис у межах самого happy-path сценарію.
-            deleteEnergyRow(uniqueConsumer);
-            createdConsumer = null;
-        });
-    }
-
-    // Видаляє рядок із таблиці за унікальним іменем споживача і перевіряє, що він зник із UI.
-    private void deleteEnergyRow(String uniqueConsumer) {
-        page.navigate(baseUrl + "/");
-        waitForEnergyPageHeader();
-
-        // Якщо рядок уже зник, додаткових дій не потрібно.
-        Locator rowToDelete = findRowContaining(uniqueConsumer);
-        if (rowToDelete == null) {
-            return;
-        }
-
-        // Натискаємо кнопку видалення і чекаємо, поки рядок зникне з таблиці.
-        rowToDelete.locator("button[type='submit']").click();
-        page.waitForURL(baseUrl + "/");
-        waitForEnergyPageHeader();
-        waitFor(() -> findRowContaining(uniqueConsumer) == null,
-            "Deleted energy reading row is still visible on the main page.");
-
-        assertThat(page.locator("body").textContent()).doesNotContain(uniqueConsumer);
-    }
-
-    // Чекає появи рядка з потрібним текстом і повертає знайдений locator.
-    private Locator waitForRowContaining(String text, String failureMessage) {
-        waitFor(() -> findRowContaining(text) != null, failureMessage);
-        return findRowContaining(text);
-    }
-
-    // Шукає перший рядок таблиці, у тексті якого міститься потрібне значення.
-    private Locator findRowContaining(String text) {
         Locator rows = page.locator("tbody tr");
-        int count = rows.count();
-        for (int index = 0; index < count; index++) {
-            Locator row = rows.nth(index);
-            String rowText = row.textContent();
-            if (rowText != null && rowText.contains(text)) {
-                return row;
-            }
-        }
-        return null;
+        assertEquals(1, rows.count());
+
+        page.click("button.btn-danger");
+
+        assertEquals(0, page.locator("tbody tr").count());
     }
 
-    // Заповнює input-поле за його HTML name-атрибутом.
-    private void setInputValue(String fieldName, String value) {
-        page.locator("[name='" + fieldName + "']").fill(value);
-    }
+    @Test
+    void energyReadingHappyPathEditsEntry() {
+        addEntry("Коваленко Тест");
 
-    // Чекає, поки на головній сторінці з'явиться заголовок із показниками.
-    private void waitForEnergyPageHeader() {
-        page.locator("h1")
-            .filter(new Locator.FilterOptions().setHasText(ENERGY_PAGE_TITLE))
-            .first()
-            .waitFor(new Locator.WaitForOptions()
-                .setState(WaitForSelectorState.VISIBLE)
-                .setTimeout((double) pageReadyTimeoutMillis));
-    }
+        page.click("a.btn-warning");
 
-    // Чекає, поки сторінка додавання повністю відрендерить форму.
-    private void waitForAddPageForm() {
-        page.locator("form")
-            .first()
-            .waitFor(new Locator.WaitForOptions()
-                .setState(WaitForSelectorState.VISIBLE)
-                .setTimeout((double) pageReadyTimeoutMillis));
-    }
+        page.fill("[name='consumer']", "Оновлений Споживач");
+        page.click("button[type='submit']");
 
-    // Простий polling helper для умов, які не мають зручного вбудованого wait у Playwright.
-    private void waitFor(BooleanSupplier condition, String failureMessage) {
-        long deadline = System.currentTimeMillis() + WAIT_TIMEOUT_MILLIS;
-        while (System.currentTimeMillis() < deadline) {
-            if (condition.getAsBoolean()) {
-                return;
-            }
-            page.waitForTimeout(POLL_INTERVAL_MILLIS);
-        }
-        throw new AssertionError(failureMessage);
-    }
-
-    // Зчитує та нормалізує базовий URL застосунку з property або environment variable.
-    private String resolveBaseUrl() {
-        String configuredUrl = resolveOptionalValue(BASE_URL_PROPERTY, BASE_URL_ENV);
-        if (configuredUrl == null || configuredUrl.isBlank()) {
-            return null;
-        }
-
-        return normalizeBaseUrl(configuredUrl);
-    }
-
-    // Прибирає зайвий "/" наприкінці та перевіряє, що URL абсолютний і коректний.
-    private String normalizeBaseUrl(String configuredUrl) {
-        String normalizedUrl = configuredUrl.endsWith("/")
-            ? configuredUrl.substring(0, configuredUrl.length() - 1)
-            : configuredUrl;
-
-        URI uri = URI.create(normalizedUrl);
-        if (uri.getScheme() == null || uri.getHost() == null) {
-            throw new IllegalStateException(
-                "E2E base URL must be an absolute URL, for example https://example.onrender.com"
-            );
-        }
-
-        return normalizedUrl;
-    }
-
-    // Читає значення спочатку з JVM property, а якщо його нема — із змінної середовища.
-    private String resolveOptionalValue(String propertyName, String envName) {
-        String configuredValue = System.getProperty(propertyName);
-        if (configuredValue == null || configuredValue.isBlank()) {
-            configuredValue = System.getenv(envName);
-        }
-        return configuredValue;
-    }
-
-    // Вибирає спосіб запуску браузера: через Selenium CDP у CI або локальний headless Chromium.
-    private Browser createBrowser() {
-        if (seleniumCdpUrl != null && !seleniumCdpUrl.isBlank()) {
-            // У CI підключаємось до вже запущеного Chromium у Selenium через CDP.
-            return playwright.chromium().connectOverCDP(seleniumCdpUrl);
-        }
-
-        return playwright.chromium().launch(new BrowserType.LaunchOptions()
-            .setHeadless(true)
-            .setArgs(List.of("--disable-dev-shm-usage", "--no-sandbox")));
-    }
-
-    // Визначає директорію для відео та screenshot, з урахуванням override через конфігурацію.
-    private Path resolveArtifactsDir() {
-        String configuredArtifactsDir = resolveOptionalValue(ARTIFACTS_DIR_PROPERTY, ARTIFACTS_DIR_ENV);
-        if (configuredArtifactsDir == null || configuredArtifactsDir.isBlank()) {
-            configuredArtifactsDir = "target/e2e-artifacts";
-        }
-        return Paths.get(configuredArtifactsDir).toAbsolutePath().normalize();
-    }
-
-    // Обирає timeout готовності сторінки: кастомний, Render-специфічний або дефолтний.
-    private int resolvePageReadyTimeoutMillis() {
-        String configuredTimeout = resolveOptionalValue(
-            PAGE_READY_TIMEOUT_MILLIS_PROPERTY,
-            PAGE_READY_TIMEOUT_MILLIS_ENV
-        );
-
-        if (configuredTimeout == null || configuredTimeout.isBlank()) {
-            // Render може запускати програму помітно довше, ніж локальне середовище.
-            return isRenderBaseUrl() ? RENDER_TIMEOUT_MILLIS : DEFAULT_PAGE_READY_TIMEOUT_MILLIS;
-        }
-        return Integer.parseInt(configuredTimeout);
-    }
-
-    // Повертає базовий timeout Playwright для дій і навігації.
-    private double resolvePlaywrightTimeoutMillis() {
-        return isRenderBaseUrl() ? RENDER_TIMEOUT_MILLIS : DEFAULT_TIMEOUT_MILLIS;
-    }
-
-    // Перевіряє, чи тести зараз виконуються проти Render-host, де очікування довші.
-    private boolean isRenderBaseUrl() {
-        if (baseUrl == null || baseUrl.isBlank()) {
-            return false;
-        }
-
-        URI uri = URI.create(baseUrl);
-        String host = uri.getHost();
-        return host != null && host.endsWith(RENDER_HOST_SUFFIX);
-    }
-
-    // Створює директорію артефактів і перетворює I/O помилки на зрозумілу помилку конфігурації тесту.
-    private void createDirectory(Path directory) {
-        try {
-            Files.createDirectories(directory);
-        } catch (Exception exception) {
-            throw new IllegalStateException(
-                "Unable to create E2E artifacts directory " + directory, exception);
-        }
-    }
-
-    // Запускає тест так, щоб при будь-якому падінні спочатку зберегти screenshot сторінки.
-    private void runWithDiagnostics(String testName, Runnable testBody) {
-        try {
-            testBody.run();
-        } catch (Throwable throwable) {
-            // Screenshot робимо до cleanup, щоб зберегти реальний стан сторінки в момент падіння.
-            captureFailureScreenshot(testName);
-            rethrowUnchecked(throwable);
-        }
-    }
-
-    // Зберігає full-page screenshot з унікальним ім'ям файлу в директорію артефактів.
-    private void captureFailureScreenshot(String testName) {
-        if (page == null) {
-            return;
-        }
-
-        Path screenshotPath = screenshotsDir.resolve(buildArtifactFileName(testName, "png"));
-        page.screenshot(new Page.ScreenshotOptions()
-            .setPath(screenshotPath)
-            .setFullPage(true)
-            .setType(ScreenshotType.PNG));
-    }
-
-    // Формує ім'я файлу артефакту з назви тесту та timestamp.
-    private String buildArtifactFileName(String testName, String extension) {
-        return sanitizeFileName(testName) + "-" + Instant.now().toEpochMilli() + "." + extension;
-    }
-
-    // Прибирає з імені файлу символи, які небажані для файлової системи.
-    private String sanitizeFileName(String value) {
-        return value.replaceAll("[^a-zA-Z0-9-_]+", "-");
-    }
-
-    // Перекидає checked/unchecked помилки без втрати первинного типу RuntimeException або Error.
-    private void rethrowUnchecked(Throwable throwable) {
-        if (throwable instanceof RuntimeException) {
-            throw (RuntimeException) throwable;
-        }
-
-        if (throwable instanceof Error) {
-            throw (Error) throwable;
-        }
-
-        throw new IllegalStateException(throwable);
+        Locator rows = page.locator("tbody tr");
+        assertEquals(1, rows.count());
+        assertTrue(rows.first().textContent().contains("Оновлений Споживач"));
     }
 }

@@ -82,10 +82,12 @@
             <artifactId>mongodb</artifactId>
             <scope>test</scope>
         </dependency>
+
+        <!-- Playwright for E2E UI tests -->
         <dependency>
             <groupId>com.microsoft.playwright</groupId>
             <artifactId>playwright</artifactId>
-            <version>${playwright.version}</version>
+            <version>1.55.0</version>
             <scope>test</scope>
         </dependency>
     </dependencies>

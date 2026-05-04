@@ -131,7 +131,7 @@ jobs:
         run: |
           mkdir -p target/ci-logs
           set -o pipefail
-          mvn -B verify -DskipUnitTests=true -Dcheckstyle.skip=true | tee target/ci-logs/integration-tests.log
+          mvn -B verify -DskipUTs=true -Dcheckstyle.skip=true | tee target/ci-logs/integration-tests.log
 
       - name: Upload integration test reports
         if: always()
