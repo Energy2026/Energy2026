@@ -61,14 +61,8 @@ class EnergyReadingHappyPathE2ETests {
         Files.createDirectories(videosDir);
 
         playwright = Playwright.create();
-
-        String cdpUrl = System.getenv("E2E_SELENIUM_CDP_URL");
-        if (cdpUrl != null && !cdpUrl.isBlank()) {
-            browser = playwright.chromium().connectOverCDP(cdpUrl);
-        } else {
-            browser = playwright.chromium().launch(
-                    new BrowserType.LaunchOptions().setHeadless(true));
-        }
+        browser = playwright.chromium().launch(
+                new BrowserType.LaunchOptions().setHeadless(true));
 
         context = browser.newContext(new Browser.NewContextOptions()
                 .setRecordVideoDir(videosDir)
