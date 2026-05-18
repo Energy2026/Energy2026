@@ -4,10 +4,12 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.microsoft.playwright.Browser;
+import com.microsoft.playwright.BrowserContext;
 import com.microsoft.playwright.BrowserType;
 import com.microsoft.playwright.Locator;
 import com.microsoft.playwright.Page;
 import com.microsoft.playwright.Playwright;
+import java.nio.file.Paths;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -41,6 +43,7 @@ class EnergyReadingHappyPathE2ETests {
 
     private Playwright playwright;
     private Browser browser;
+    private BrowserContext context;
     private Page page;
 
     @BeforeEach
@@ -49,11 +52,14 @@ class EnergyReadingHappyPathE2ETests {
         playwright = Playwright.create();
         browser = playwright.chromium().launch(
                 new BrowserType.LaunchOptions().setHeadless(true));
-        page = browser.newPage();
+        context = browser.newContext(new Browser.NewContextOptions()
+                .setRecordVideoDir(Paths.get("target/e2e-artifacts/videos")));
+        page = context.newPage();
     }
 
     @AfterEach
     void tearDown() {
+        context.close();
         browser.close();
         playwright.close();
     }
