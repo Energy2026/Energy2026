@@ -4,10 +4,15 @@ import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import com.microsoft.playwright.Browser;
+import com.microsoft.playwright.BrowserContext;
 import com.microsoft.playwright.BrowserType;
 import com.microsoft.playwright.Locator;
 import com.microsoft.playwright.Page;
 import com.microsoft.playwright.Playwright;
+import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -27,6 +32,10 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 class EnergyReadingHappyPathE2ETests {
 
     private static final String BASE_URL = "http://localhost:8081";
+    private static final int VIDEO_WIDTH = 1280;
+    private static final int VIDEO_HEIGHT = 720;
+    private static final int VIEWPORT_WIDTH = 1440;
+    private static final int VIEWPORT_HEIGHT = 1200;
 
     @Container
     static MongoDBContainer mongoDBContainer = new MongoDBContainer("mongo:6.0");
@@ -41,19 +50,30 @@ class EnergyReadingHappyPathE2ETests {
 
     private Playwright playwright;
     private Browser browser;
+    private BrowserContext context;
     private Page page;
 
     @BeforeEach
-    void setUp() {
+    void setUp() throws IOException {
         repository.deleteAll();
+
+        Path videosDir = Paths.get("target/e2e-artifacts/videos");
+        Files.createDirectories(videosDir);
+
         playwright = Playwright.create();
         browser = playwright.chromium().launch(
                 new BrowserType.LaunchOptions().setHeadless(true));
-        page = browser.newPage();
+
+        context = browser.newContext(new Browser.NewContextOptions()
+                .setRecordVideoDir(videosDir)
+                .setRecordVideoSize(VIDEO_WIDTH, VIDEO_HEIGHT)
+                .setViewportSize(VIEWPORT_WIDTH, VIEWPORT_HEIGHT));
+        page = context.newPage();
     }
 
     @AfterEach
     void tearDown() {
+        context.close();
         browser.close();
         playwright.close();
     }
